@@ -16,12 +16,21 @@ static int nb_active_ports = 0;
 
 int mic_tcp_socket(start_mode sm)
 {
-   int result = -1;
-   printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
-   result = initialize_components(sm); /* Appel obligatoire */
-   set_loss_rate(0);
+    printf("[MIC-TCP] Appel de la fonction: %s\n", __FUNCTION__);
+    if (nb_active_ports >= MAX_PORTS) {
+        printf("[MIC-TCP] Erreur : nombre maximum de sockets atteint\n");
+        return -1;
+    }
+    int result = initialize_components(sm); /* Appel obligatoire */
+    set_loss_rate(0);
 
-   return result;
+    // Initialisation de la structure du socket
+    
+    memset(&active_ports[nb_active_ports].local_addr, 0, sizeof(mic_tcp_sock_addr));
+    memset(&active_ports[nb_active_ports].remote_addr, 0, sizeof(mic_tcp_sock_addr));
+    nb_active_ports++;
+
+    return nb_active_ports - 1; // retourne l'index du socket créé
 }
 
 // Ajoute un port à la liste des ports actifs
@@ -55,9 +64,13 @@ static int is_port_active(int port) {
  */
 int mic_tcp_bind(int socket, mic_tcp_sock_addr addr)
 {
-   printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
-   //add_active_port(addr.port); //adresse locale contraireement à accept qui fait en remote
-   return 0;
+    printf("[MIC-TCP] Appel de la fonction: %s\n", __FUNCTION__);
+    if (socket < 0 || socket >= nb_active_ports){ 
+        return -1;
+    }else{ 
+        active_ports[socket].local_addr = addr;
+        return 0;
+    }
 }
 
 /*
@@ -66,7 +79,7 @@ int mic_tcp_bind(int socket, mic_tcp_sock_addr addr)
  */
 int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
 {
-    printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
+    printf("[MIC-TCP] Appel de la fonction: %s\n", __FUNCTION__);
     return 0;// à coder plus tard
 }
 
@@ -76,23 +89,13 @@ int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
  */
 int mic_tcp_connect(int socket, mic_tcp_sock_addr addr)
 {
-    printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
-
-    if (nb_active_ports < MAX_PORTS) {
-        active_ports[socket].remote_addr=addr;
-        nb_active_ports++;
-        /*struct mic_tcp_sock_addr addrlocal;
-        addrlocal.port = port;
-        addrlocal.ip_addr.addr = "127.0.0.1";
-        addrlocal.ip_addr.addr_size = strlen(addrlocal.ip_addr.addr) + 1;
-        active_ports[nb_active_ports].remote_addr=addrlocal;
-        nb_active_ports++;*/
-    }else{
-        printf("[MIC-TCP] Erreur : nombre maximum de ports actifs atteint\n");
+    printf("[MIC-TCP] Appel de la fonction: %s\n", __FUNCTION__);
+    if (socket < 0 || socket >= nb_active_ports){ 
+        return -1;
+    }else{ 
+        active_ports[socket].remote_addr = addr;
+        return 0;
     }
-
-
-    return 0;
 }
 
 /*

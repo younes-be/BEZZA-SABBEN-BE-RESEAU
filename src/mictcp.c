@@ -3,14 +3,14 @@
 
 
 #define MAX_PORTS 32
-static int active_ports[MAX_PORTS];
+static struct mic_tcp_sock_addr active_ports[MAX_PORTS];
 static int nb_active_ports = 0;
 /*
  * Permet de créer un socket entre l’application et MIC-TCP
  * Retourne le descripteur du socket ou bien -1 en cas d'erreur
  */
 
-struct mictcp_socket_addr*;
+
 
 int mic_tcp_socket(start_mode sm)
 {
@@ -25,14 +25,18 @@ int mic_tcp_socket(start_mode sm)
 // Ajoute un port à la liste des ports actifs
 static void add_active_port(int port) {
     if (nb_active_ports < MAX_PORTS) {
-        active_ports[nb_active_ports++] = port;
+        struct mic_tcp_sock_addr addrlocal;
+        addrlocal.port = port;
+        addrlocal.ip_addr.addr = "127.0.0.1";
+        addrlocal.ip_addr.addr_size = strlen(addrlocal.ip_addr.addr) + 1;
+        nb_active_ports++;
     }
 }
 
 // Vérifie si un port est actif
 static int is_port_active(int port) {
     for (int i = 0; i < nb_active_ports; ++i) {
-        if (active_ports[i] == port) return 1;
+        if (active_ports[i].port == port) return 1;
     }
     return 0;
 }
@@ -65,7 +69,11 @@ int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
 int mic_tcp_connect(int socket, mic_tcp_sock_addr addr)
 {
     printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
-    return -1;
+
+    add_active_port(socket);
+
+
+    return 0;
 }
 
 /*
@@ -81,22 +89,13 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size) //mic_sock est l'indi
 	pdu.payload.data = mesg;
 	pdu.payload.size = mesg_size;
 
-    int numeroPortDest active_ports[mic_sock];
+    int numeroPortDest=active_ports[mic_sock].port;
 	pdu.header.source_port = 11111; // au hasard
 	pdu.header.dest_port = numeroPortDest;
 
 
 
-    mic_tcp_sock_addr mictcp_socket_addr;
-    struct hostent *hp
-    if ((hp = gethostbyname(nom_machine)) == NULL) {
-		perror("Problème lors de gethostbyname");
-		exit(1);
-	}
-    memcpy((char*)&(mictcp_socket_addr.ip_addr.addr), hp->h_addr);
-    mictcp_socket_addr.ip_addr.addr_size = sizeof(mictcp_socket_addr.ip_addr.addr);                    
-    mictcp_socket_addr.port = 11111;// au hasard
-	
+    struct mic_tcp_ip_addr mictcp_socket_addr=active_ports[mic_sock].ip_addr;
 
     int sent_size = IP_send(pdu,mictcp_socket_addr);// contenue dans la structure mictcp_socket correspondant au socket identifié par mic_sock passé en paramètre).
     if (sent_size == -1)

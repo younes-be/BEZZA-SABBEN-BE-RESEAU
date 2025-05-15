@@ -5,6 +5,9 @@
  * Permet de créer un socket entre l’application et MIC-TCP
  * Retourne le descripteur du socket ou bien -1 en cas d'erreur
  */
+
+struct mictcp_socket_addr*;
+
 int mic_tcp_socket(start_mode sm)
 {
    int result = -1;
@@ -21,8 +24,9 @@ int mic_tcp_socket(start_mode sm)
  */
 int mic_tcp_bind(int socket, mic_tcp_sock_addr addr)
 {
-   printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
-   return -1;
+    printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
+
+    return 0; // Succès
 }
 
 /*
@@ -49,7 +53,7 @@ int mic_tcp_connect(int socket, mic_tcp_sock_addr addr)
  * Permet de réclamer l’envoi d’une donnée applicative
  * Retourne la taille des données envoyées, et -1 en cas d'erreur
  */
-int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
+int mic_tcp_send (int mic_sock, char* mesg, int mesg_size) //mic_sock est l'indice du tableau de sockets
 {
     printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
 
@@ -58,13 +62,31 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
 	pdu.payload.data = mesg;
 	pdu.payload.size = mesg_size;
 
-	pdu.header.source_port = // aller chercher dans la structure mictcp_socket correspondant au socket identifié par mic_sock passé en paramètre.
-	pdu.header.dest_port =  // Port auquel on veut envoyer le message qui a été donné par l’application lors du mic_tcp_connect et qu’on a stocké dans la structure mictcp_socket correspondant au socket identifié par mic_sock passé en paramètre.
+    int numeroPortDest active_ports[mic_sock];
+	pdu.header.source_port = 11111; // au hasard
+	pdu.header.dest_port = numeroPortDest;
 
-//Envoyer un message (dont la taille le contenu sont passés en paramètres).
-	Int sent_size = IP_send(pdu, structure mictcp_socket_addr contenue dans la structure mictcp_socket correspondant au socket identifié par mic_sock passé en paramètre).
 
-             
+
+    mic_tcp_sock_addr mictcp_socket_addr;
+    struct hostent *hp
+    if ((hp = gethostbyname(nom_machine)) == NULL) {
+		perror("Problème lors de gethostbyname");
+		exit(1);
+	}
+    memcpy((char*)&(mictcp_socket_addr.ip_addr.addr), hp->h_addr);
+    mictcp_socket_addr.ip_addr.addr_size = sizeof(mictcp_socket_addr.ip_addr.addr);                    
+    mictcp_socket_addr.port = 11111;// au hasard
+	
+
+    int sent_size = IP_send(pdu,mictcp_socket_addr);// contenue dans la structure mictcp_socket correspondant au socket identifié par mic_sock passé en paramètre).
+    if (sent_size == -1)
+    {
+        printf("[MIC-TCP] Erreur lors de l'envoi du PDU\n");
+        return -1;
+    }
+    printf("[MIC-TCP] Envoi du PDU de taille %d\n", sent_size);
+    // On devra aussi mettre à jour le numéro de séquence et d'acquittement
     return sent_size;
 }
 

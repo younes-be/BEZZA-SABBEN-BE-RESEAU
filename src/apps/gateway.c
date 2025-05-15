@@ -10,6 +10,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <limits.h>
+#include <bits/getopt_core.h>
 
 //
 // Déclaration des types, constantes et macros

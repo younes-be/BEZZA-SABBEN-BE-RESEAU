@@ -3,7 +3,9 @@
 
 
 #define MAX_PORTS 32
-static struct mic_tcp_sock_addr active_ports[MAX_PORTS];
+
+
+static struct mic_tcp_sock active_ports[MAX_PORTS];
 static int nb_active_ports = 0;
 /*
  * Permet de créer un socket entre l’application et MIC-TCP
@@ -23,20 +25,26 @@ int mic_tcp_socket(start_mode sm)
 }
 
 // Ajoute un port à la liste des ports actifs
-static void add_active_port(int port) {
+/*static void add_active_port(int port) {
     if (nb_active_ports < MAX_PORTS) {
         struct mic_tcp_sock_addr addrlocal;
         addrlocal.port = port;
         addrlocal.ip_addr.addr = "127.0.0.1";
         addrlocal.ip_addr.addr_size = strlen(addrlocal.ip_addr.addr) + 1;
+        active_ports[nb_active_ports].remote_addr=addrlocal;
         nb_active_ports++;
+    }else{
+        printf("[MIC-TCP] Erreur : nombre maximum de ports actifs atteint\n");
     }
-}
+}*/
 
 // Vérifie si un port est actif
 static int is_port_active(int port) {
     for (int i = 0; i < nb_active_ports; ++i) {
-        if (active_ports[i].port == port) return 1;
+        if (active_ports[i].local_addr.port == port) return 1;
+    }
+    for (int i = 0; i < nb_active_ports; ++i) {
+        if (active_ports[i].remote_addr.port == port) return 1;
     }
     return 0;
 }
@@ -48,7 +56,7 @@ static int is_port_active(int port) {
 int mic_tcp_bind(int socket, mic_tcp_sock_addr addr)
 {
    printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
-   //add_active_port(addr.port);
+   //add_active_port(addr.port); //adresse locale contraireement à accept qui fait en remote
    return 0;
 }
 
@@ -59,7 +67,7 @@ int mic_tcp_bind(int socket, mic_tcp_sock_addr addr)
 int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
 {
     printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
-    return 0;
+    return 0;// à coder plus tard
 }
 
 /*
@@ -70,7 +78,18 @@ int mic_tcp_connect(int socket, mic_tcp_sock_addr addr)
 {
     printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
 
-    add_active_port(socket);
+    if (nb_active_ports < MAX_PORTS) {
+        active_ports[socket].remote_addr=addr;
+        nb_active_ports++;
+        /*struct mic_tcp_sock_addr addrlocal;
+        addrlocal.port = port;
+        addrlocal.ip_addr.addr = "127.0.0.1";
+        addrlocal.ip_addr.addr_size = strlen(addrlocal.ip_addr.addr) + 1;
+        active_ports[nb_active_ports].remote_addr=addrlocal;
+        nb_active_ports++;*/
+    }else{
+        printf("[MIC-TCP] Erreur : nombre maximum de ports actifs atteint\n");
+    }
 
 
     return 0;
@@ -89,13 +108,13 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size) //mic_sock est l'indi
 	pdu.payload.data = mesg;
 	pdu.payload.size = mesg_size;
 
-    int numeroPortDest=active_ports[mic_sock].port;
-	pdu.header.source_port = 11111; // au hasard
+    int numeroPortDest=active_ports[mic_sock].remote_addr.port;
+	//pdu.header.source_port = 11111; // au hasard, dans le futur il faudra l'incrémenter à chaque fois
 	pdu.header.dest_port = numeroPortDest;
 
+    //mesg=malloc(mesg_size);
 
-
-    struct mic_tcp_ip_addr mictcp_socket_addr=active_ports[mic_sock].ip_addr;
+    struct mic_tcp_ip_addr mictcp_socket_addr=active_ports[mic_sock].remote_addr.ip_addr;
 
     int sent_size = IP_send(pdu,mictcp_socket_addr);// contenue dans la structure mictcp_socket correspondant au socket identifié par mic_sock passé en paramètre).
     if (sent_size == -1)
@@ -123,7 +142,13 @@ int mic_tcp_recv (int socket, char* mesg, int max_mesg_size)
         return -1;
     }
     int taille = app_buffer_get(payload);
-    return taille;// ou -1 si erreur;
+    printf("message reçu : %s\n", payload.data);
+    if (taille == -1)
+    {
+        printf("[MIC-TCP] Erreur lors de la récupération du PDU\n");
+        return -1;
+    }
+    return taille;
     
 }
 

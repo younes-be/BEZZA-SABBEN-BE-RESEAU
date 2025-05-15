@@ -1,6 +1,10 @@
 #include <mictcp.h>
 #include <api/mictcp_core.h>
 
+
+#define MAX_PORTS 32
+static int active_ports[MAX_PORTS];
+static int nb_active_ports = 0;
 /*
  * Permet de créer un socket entre l’application et MIC-TCP
  * Retourne le descripteur du socket ou bien -1 en cas d'erreur
@@ -15,6 +19,21 @@ int mic_tcp_socket(start_mode sm)
    return result;
 }
 
+// Ajoute un port à la liste des ports actifs
+static void add_active_port(int port) {
+    if (nb_active_ports < MAX_PORTS) {
+        active_ports[nb_active_ports++] = port;
+    }
+}
+
+// Vérifie si un port est actif
+static int is_port_active(int port) {
+    for (int i = 0; i < nb_active_ports; ++i) {
+        if (active_ports[i] == port) return 1;
+    }
+    return 0;
+}
+
 /*
  * Permet d’attribuer une adresse à un socket.
  * Retourne 0 si succès, et -1 en cas d’échec
@@ -22,7 +41,8 @@ int mic_tcp_socket(start_mode sm)
 int mic_tcp_bind(int socket, mic_tcp_sock_addr addr)
 {
    printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
-   return -1;
+   //add_active_port(addr.port);
+   //return 0;
 }
 
 /*
@@ -64,7 +84,14 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
 int mic_tcp_recv (int socket, char* mesg, int max_mesg_size)
 {
     printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
-    return -1;
+    mic_tcp_payload payload;
+    payload.data = mesg;
+    if ((payload.size = max_mesg_size) <0){
+        return -1;
+    }
+    int taille = app_buffer_get(payload);
+    return taille;// ou -1 si erreur;
+    
 }
 
 /*
@@ -87,4 +114,8 @@ int mic_tcp_close (int socket)
 void process_received_PDU(mic_tcp_pdu pdu, mic_tcp_ip_addr local_addr, mic_tcp_ip_addr remote_addr)
 {
     printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
+    if (is_port_active(pdu.header.dest_port)) {
+        app_buffer_put(pdu.payload); // On insère le PDU dans le buffer de réception
+    }
+
 }

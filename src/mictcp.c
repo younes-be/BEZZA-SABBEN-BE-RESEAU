@@ -24,6 +24,12 @@ int mic_tcp_socket(start_mode sm)
     int result = initialize_components(sm); /* Appel obligatoire */
     set_loss_rate(0);
 
+    //vérification de la sortie de initialize_components
+    if (result == -1) {
+        printf("[MIC-TCP] Erreur lors de l'initialisation des composants\n");
+        return -1;
+    }
+
     // Initialisation de la structure du socket
     
     memset(&active_ports[nb_active_ports].local_addr, 0, sizeof(mic_tcp_sock_addr));
@@ -139,19 +145,55 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size) //mic_sock est l'indi
 int mic_tcp_recv (int socket, char* mesg, int max_mesg_size)
 {
     printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
-    mic_tcp_payload payload;
-    payload.data = mesg;
-    if ((payload.size = max_mesg_size) <0){
-        return -1;
-    }
-    int taille = app_buffer_get(payload);
-    printf("message reçu : %s\n", payload.data);
-    if (taille == -1)
-    {
-        printf("[MIC-TCP] Erreur lors de la récupération du PDU\n");
-        return -1;
-    }
-    return taille;
+    static int expected_seq_num = 0;
+    mic_tcp_pdu pdu;
+    mic_tcp_ip_addr local_addr, remote_addr;
+    int recv_size = -1;
+
+    // Préparer le buffer pour recevoir le PDU
+    pdu.payload.data = malloc(max_mesg_size);
+    pdu.payload.size = max_mesg_size;
+
+    
+        recv_size = IP_recv(&pdu, &local_addr, &remote_addr, 0);
+        if (recv_size < 0) {
+            free(pdu.payload.data);
+            printf("[MIC-TCP] Erreur lors de la réception du PDU\n");
+            return -1;
+        }
+
+        // numéro de séquence attendu reçu
+        if (pdu.header.seq_num == expected_seq_num) {
+            // création et envoie du ACK
+            mic_tcp_pdu ack_pdu;
+            memset(&ack_pdu, 0, sizeof(mic_tcp_pdu));
+            ack_pdu.header.ack = 1;
+            ack_pdu.header.ack_num = expected_seq_num;
+            ack_pdu.header.dest_port = pdu.header.source_port;
+            ack_pdu.header.source_port = pdu.header.dest_port;
+            ack_pdu.payload.data = NULL;
+            ack_pdu.payload.size = 0;
+            IP_send(ack_pdu, remote_addr);
+
+            int size_to_copy;
+            // Copier la donnée reçue dans le buffer utilisateur
+            if(recv_size < max_mesg_size) {
+                size_to_copy = recv_size;
+            }else {
+                size_to_copy = max_mesg_size;
+            }
+
+            memcpy(mesg, pdu.payload.data, size_to_copy);// transfert de la donnée dans le buffer utilisateur
+
+            free(pdu.payload.data);
+
+            expected_seq_num = (expected_seq_num + 1) % 2;
+            return size_to_copy;
+        } else {//numéro de déquence inattendu
+            printf("[MIC-TCP] Numéro de séquence inattendu: %d, attendu: %d\n", pdu.header.seq_num, expected_seq_num);
+            free(pdu.payload.data);
+            return -1;
+        }
     
 }
 

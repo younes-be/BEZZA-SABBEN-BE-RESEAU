@@ -136,10 +136,11 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size) //mic_sock est l'indi
     int notReceived = -1;
     mic_tcp_pdu pduACK;
 
+    notReceived = IP_recv(&pduACK, &active_ports[mic_sock].local_addr.ip_addr, &active_ports[mic_sock].remote_addr.ip_addr, 1000); // on attend 1 seconde, donc on utilise le timer dans la fonction, permet de ne pas avoir un while qui lance la fonction IP_recv plein de fois
 
     while(notReceived==-1) // dans le futur on pourra faire un for pour abandonner une pdu qui poserait problème
     {
-        notReceived = IP_recv(&pduACK, &active_ports[mic_sock].local_addr.ip_addr, &active_ports[mic_sock].remote_addr.ip_addr, 1000); // on attend 1 seconde, donc on utilise le timer dans la fonction, permet de ne pas avoir un while qui lance la fonction IP_recv plein de fois
+        notReceived = IP_recv(&pduACK, &active_ports[mic_sock].local_addr.ip_addr, &active_ports[mic_sock].remote_addr.ip_addr, 1000); 
         if(notReceived != -1){
                 if (pduACK.header.ack == (num_sequence)){
                     notReceived=0;

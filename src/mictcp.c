@@ -102,20 +102,21 @@ int mic_tcp_connect(int socket, mic_tcp_sock_addr addr)
  * Permet de réclamer l’envoi d’une donnée applicative
  * Retourne la taille des données envoyées, et -1 en cas d'erreur
  */
+
 int mic_tcp_send (int mic_sock, char* mesg, int mesg_size) //mic_sock est l'indice du tableau de sockets
 {
     printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
-
+    unsigned static int num_sequence =0;
 	// Créer un mic_tcp_pdu
 	mic_tcp_pdu pdu;
 	pdu.payload.data = mesg;
 	pdu.payload.size = mesg_size;
 
     int numeroPortDest=active_ports[mic_sock].remote_addr.port;
-	//pdu.header.source_port = 11111; // au hasard, dans le futur il faudra l'incrémenter à chaque fois
 	pdu.header.dest_port = numeroPortDest;
 
-    //mesg=malloc(mesg_size);
+    pdu.header.seq_num=num_sequence; // pdu construite
+
 
     struct mic_tcp_ip_addr mictcp_socket_addr=active_ports[mic_sock].remote_addr.ip_addr;
 
@@ -125,8 +126,32 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size) //mic_sock est l'indi
         printf("[MIC-TCP] Erreur lors de l'envoi du PDU\n");
         return -1;
     }
-    printf("[MIC-TCP] Envoi du PDU de taille %d\n", sent_size);
-    // On devra aussi mettre à jour le numéro de séquence et d'acquittement
+
+    int notReceived = -1;
+    mic_tcp_pdu pduACK;
+
+
+    while(notReceived==-1) // dans le futur on pourra faire un for pour abandonner une pdu qui poserait problème
+    {
+        notReceived = IP_recv(&pduACK, &active_ports[mic_sock].local_addr.ip_addr, &active_ports[mic_sock].remote_addr.ip_addr, 1000); // on attend 1 seconde, donc on utilise le timer dans la fonction, permet de ne pas avoir un while qui lance la fonction IP_recv plein de fois
+        if(notReceived != -1){
+                if (pduACK.header.ack == (num_sequence)){
+                    notReceived=0;
+                    printf("[MIC-TCP] PDU de type ACK reçu\n");
+                    printf("[MIC-TCP] Numéro de séquence : %d\n", pduACK.header.seq_num);
+                    printf("[MIC-TCP] Numéro d'acquittement : %d\n", pduACK.header.ack_num);
+                    printf("\n"); 
+                }else{
+                    printf("PDU de type ACK non reçu, une autre PDU a été reçue\n");
+                    printf("Numéro de séquence : %d\n", pduACK.header.seq_num);
+                }
+        }else{
+            sent_size = IP_send(pdu,mictcp_socket_addr);//on renvoie la pdu après l'attente d'une seconde
+        }
+    }
+
+    num_sequence=(num_sequence+1)%2;//on change le numéro de séquence pour la prochaine pdu
+
     return sent_size;
 }
 

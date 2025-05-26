@@ -114,6 +114,10 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
 {
     printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
     
+    unsigned int static nombreDeMessage=0; // prend en compte les pertes aussi
+
+    unsigned int static nombreDeMessageRecu=0; // ne prend pas en compte les pertes
+
     // Créer un mic_tcp_pdu
     mic_tcp_pdu pdu;
     pdu.payload.data = mesg;
@@ -142,21 +146,48 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
     pduACK.payload.size = 8;
     mic_tcp_ip_addr pduLocal;
     mic_tcp_ip_addr pduRemote;
-    while(IP_recv(&pduACK, &pduLocal, &pduRemote, 1000)==-1 || pduACK.header.ack == 0 || pduACK.header.ack_num != (num_sequence % 2))
+    while(IP_recv(&pduACK, &pduLocal, &pduRemote, 1000)==-1 || pduACK.header.ack == 0||pduACK.header.ack_num != (num_sequence % 2))
     {
-        if (pduACK.header.ack_num == (num_sequence % 2)){
-            printf("[MIC-TCP] PDU de type ACK reçu\n");
-            printf("[MIC-TCP] Numéro de séquence : %d\n", pduACK.header.seq_num);
-            printf("[MIC-TCP] Numéro d'acquittement : %d\n", pduACK.header.ack_num);
-            printf("\n"); 
-        }else{
-            printf("PDU de type ACK non reçu, une autre PDU a été reçue\n");
-            printf("Numéro de séquence : %d\n", pduACK.header.seq_num);
-        }
-        sent_size = IP_send(pdu, mictcp_socket_addr); // on renvoie la pdu après l'attente d'une seconde
-    }
+            //utiliser le buffer circulaire
+            if (nombreDeMessage<100){
+                taux_limite=nombreDeMessageRecu/nombreDeMessage; //attention div par 0
+            }else { // on a au moins 100 msg
+                taux_limite=
+            }   
 
-    num_sequence = (num_sequence + 1) % 2; // modulo 2 pour alterner
+
+            //si le numéro de séquence de l'ACK reçu correspond à celui attendu
+            if (pduACK.header.ack_num == (num_sequence % 2)){
+                printf("[MIC-TCP] PDU de type ACK reçu\n");
+                printf("[MIC-TCP] Numéro de séquence : %d\n", pduACK.header.seq_num);
+                printf("[MIC-TCP] Numéro d'acquittement : %d\n", pduACK.header.ack_num);
+                printf("\n"); 
+                num_sequence = (num_sequence + 1) % 2; //modulo 2 à changer
+                nombreDeMessage++;
+                nombreDeMessageRecu++;
+                break; // sinon on fait un sent pour rien
+            }else{ // si le numéro de séquence ne correspond pas à celui attendu
+                printf("PDU de type ACK non reçu, une autre PDU a été reçue\n");
+                printf("Numéro de séquence : %d\n", pduACK.header.seq_num);
+                /*
+                    if (pourcentage_perte>taux_limite){
+                        //rien 
+                    }else {
+                        //le numéro de séquence n'est pas à changer car il n'est pas bon, il sera bon à la prochaine itération
+                        //à changer quand on sera pas modulo 2
+                        nombreDeMessage++;
+                        break;
+                    }
+
+                */
+            }
+            sent_size = IP_send(pdu, mictcp_socket_addr); // on renvoie la pdu après l'attente d'une seconde
+    }
+        
+
+    
+
+    
 
     free(pduACK.payload.data);
     return sent_size;

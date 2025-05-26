@@ -3,17 +3,45 @@
 
 
 #define MAX_PORTS 32
-
+#define TAILLE_BUF_CIRC 100
 unsigned static int num_sequence = 0;
 unsigned static int expected_seq_num = 0; // Utilisée pour la gestion du numéro de séquence attendu à la réception
 static struct mic_tcp_sock active_ports[MAX_PORTS];
 static int nb_active_ports = 0;
+
+//définition du buffer circulaire pour créer la fenêtre glissante.
+typedef struct {
+    char buffer[TAILLE_BUF_CIRC];
+    int head;
+} buffer_circ;
+
+//fonction pour gérer le buffer circlaire:
+
+int buffer_circ_push(buffer_circ *cbuf, char etat_ACK)
+{
+    int next;
+
+    next = cbuf->head + 1;  
+    if (next >= TAILLE_BUF_CIRC)
+        next = 0;
+
+    cbuf->buffer[cbuf->head] = etat_ACK;  
+    cbuf->head = next;             
+    return 0;  
+}
+
+// fonction pour calculer le pourcentage actuel 
+//ici
+
+// création du buffer circulaire :
+
+buffer_circ buf_c;
+buf_c.head=0;
+
 /*
  * Permet de créer un socket entre l’application et MIC-TCP
  * Retourne le descripteur du socket ou bien -1 en cas d'erreur
  */
-
-
 
 int mic_tcp_socket(start_mode sm)
 {

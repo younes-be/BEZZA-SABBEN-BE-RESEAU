@@ -12,7 +12,7 @@ static int nb_active_ports = 0;
 int booleenInitialise=0;
 
 
-//définition du buffer circulaire pour la fenêtre glissante.
+//buffer circulaire pour la fenêtre glissante.
 typedef struct {
     char buffer[TAILLE_BUF_CIRC];
     int head;
@@ -82,7 +82,7 @@ int mic_tcp_socket(start_mode sm)
         return -1;
     }
     int result = initialize_components(sm); /* Appel obligatoire */
-    set_loss_rate(5);
+    set_loss_rate(0);
 
     //vérification de la sortie de initialize_components
     if (result == -1) {
@@ -146,7 +146,67 @@ int mic_tcp_bind(int socket, mic_tcp_sock_addr addr)
 int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
 {
     printf("[MIC-TCP] Appel de la fonction: %s\n", __FUNCTION__);
-    return 0;// à coder plus tard
+
+    mic_tcp_pdu pdu_syn;
+    mic_tcp_ip_addr local_addr, remote_addr;
+    int synRecu = 0;
+
+    
+    pdu_syn.payload.data = malloc(8); 
+    pdu_syn.payload.size = 8;
+    local_addr.addr = malloc(100);
+    local_addr.addr_size = 100;
+    remote_addr.addr = malloc(100);
+    remote_addr.addr_size = 100;
+    int statutRecv;
+    while (!synRecu) {
+        statutRecv = IP_recv(&pdu_syn, &local_addr, &remote_addr, 0);
+        
+        if (statutRecv != -1 && pdu_syn.header.syn == 1 && pdu_syn.header.ack == 0) {
+        synRecu = 1;
+        // on remplit l'adresse distante 
+        if (addr != NULL) {
+            addr->ip_addr.addr = remote_addr.addr;
+            addr->ip_addr.addr_size = strlen(remote_addr.addr) + 1;
+            addr->port = pdu_syn.header.source_port;
+        }else{
+            return -1;// probleme au niveau de l'adresse
+        }
+        // on donne l'adresse distante au socket
+        active_ports[socket].remote_addr = *addr;
+        }
+    }
+
+    // envoi syn-ack
+    mic_tcp_pdu pdu_synack;
+    memset(&pdu_synack, 0, sizeof(mic_tcp_pdu));
+    pdu_synack.header.syn = 1;
+    pdu_synack.header.ack = 1;// on remplit les deux flags pour dire que c'est un SYN-ACK
+    pdu_synack.header.source_port = active_ports[socket].local_addr.port;
+    pdu_synack.header.dest_port = active_ports[socket].remote_addr.port;
+    IP_send(pdu_synack, active_ports[socket].remote_addr.ip_addr);
+
+    // attente ack
+    mic_tcp_pdu pdu_ack;
+    pdu_ack.payload.data = malloc(8);
+    pdu_ack.payload.size = 8;
+    int ackRecu = 0;
+    
+    while (!ackRecu) {
+        statutRecv = IP_recv(&pdu_ack, &local_addr, &remote_addr, 100);
+        if (statutRecv != -1 && pdu_ack.header.syn == 0 && pdu_ack.header.ack == 1) {
+            ackRecu = 1;
+        } else {
+            break;// ack pas recu mais on sort quand meme, on s'en occupe apres.
+        }
+    }
+
+    free(pdu_syn.payload.data);
+    free(pdu_ack.payload.data);
+    free(local_addr.addr);
+    free(remote_addr.addr);
+
+    return 0;
 }
 
 /*
@@ -206,18 +266,18 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
     mic_tcp_pdu pduACK;
     pduACK.payload.data = malloc(8); // 8 octets suffisent pour le header
     pduACK.payload.size = 8;
-    mic_tcp_ip_addr pduLocal;
-    mic_tcp_ip_addr pduRemote;
+    mic_tcp_ip_addr Local;
+    mic_tcp_ip_addr Remote;
 
-    pduLocal.addr = malloc(100);
-    pduLocal.addr_size = 100;
-    pduRemote.addr = malloc(100);
-    pduRemote.addr_size = 100;
+    Local.addr = malloc(100); // j'ai du le faire a cause d'un seg fault avec le IP_recv
+    Local.addr_size = 100;
+    Remote.addr = malloc(100);
+    Remote.addr_size = 100;
 
     while (1)
     {
-        int recv_status = IP_recv(&pduACK, &pduLocal, &pduRemote, 100);
-        if (recv_status != -1 && pduACK.header.ack == 1 && pduACK.header.ack_num == (num_sequence % 2)) {
+        int statutRecv = IP_recv(&pduACK, &Local, &Remote, 100);
+        if (statutRecv != -1 && pduACK.header.ack == 1 && pduACK.header.ack_num == (num_sequence % 2)) {
             // ACK attendu reçu
             printf("[MIC-TCP] PDU de type ACK reçu\n");
             num_sequence = (num_sequence + 1) % 2;
@@ -236,15 +296,10 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
             printf("après le send\n");
         }
     }
-        
-
-    
-
-    
 
     free(pduACK.payload.data);
-   // free(pduLocal.addr);
-    free(pduRemote.addr);
+   // free(Local.addr);
+    free(Remote.addr);
     return sent_size;
 }
 

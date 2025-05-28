@@ -12,7 +12,7 @@ static int nb_active_ports = 0;
 int booleenInitialise=0;
 
 
-//définition du buffer circulaire pour créer la fenêtre glissante.
+//définition du buffer circulaire pour la fenêtre glissante.
 typedef struct {
     char buffer[TAILLE_BUF_CIRC];
     int head;
@@ -82,7 +82,7 @@ int mic_tcp_socket(start_mode sm)
         return -1;
     }
     int result = initialize_components(sm); /* Appel obligatoire */
-    set_loss_rate(0);
+    set_loss_rate(5);
 
     //vérification de la sortie de initialize_components
     if (result == -1) {
@@ -197,7 +197,6 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
     struct mic_tcp_ip_addr mictcp_socket_addr = active_ports[mic_sock].remote_addr.ip_addr;
 
     int sent_size = IP_send(pdu, mictcp_socket_addr);
-    printf("passé\n");
     if (sent_size == -1)
     {
         printf("[MIC-TCP] Erreur lors de l'envoi du PDU\n");
@@ -215,10 +214,9 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
     pduRemote.addr = malloc(100);
     pduRemote.addr_size = 100;
 
-    printf("avant le while\n");
     while (1)
     {
-        int recv_status = IP_recv(&pduACK, &pduLocal, &pduRemote, 1000);
+        int recv_status = IP_recv(&pduACK, &pduLocal, &pduRemote, 100);
         if (recv_status != -1 && pduACK.header.ack == 1 && pduACK.header.ack_num == (num_sequence % 2)) {
             // ACK attendu reçu
             printf("[MIC-TCP] PDU de type ACK reçu\n");

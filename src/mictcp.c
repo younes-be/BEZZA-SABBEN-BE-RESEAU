@@ -4,21 +4,31 @@
 
 #define MAX_PORTS 32
 #define TAILLE_BUF_CIRC 100
+#define TAUX_LIMITE 10
 unsigned static int num_sequence = 0;
 unsigned static int expected_seq_num = 0; // Utilisée pour la gestion du numéro de séquence attendu à la réception
 static struct mic_tcp_sock active_ports[MAX_PORTS];
 static int nb_active_ports = 0;
+int booleenInitialise=0;
+
 
 //définition du buffer circulaire pour créer la fenêtre glissante.
 typedef struct {
     char buffer[TAILLE_BUF_CIRC];
     int head;
+    int nbData;
 } buffer_circ;
 
+
+buffer_circ buf_c;
 //fonction pour gérer le buffer circlaire:
 
 int buffer_circ_push(buffer_circ *cbuf, char etat_ACK)
 {
+    if (cbuf == NULL) {
+        perror("problème adresse null");
+    }
+
     int next;
 
     next = cbuf->head + 1;  
@@ -26,17 +36,38 @@ int buffer_circ_push(buffer_circ *cbuf, char etat_ACK)
         next = 0;
 
     cbuf->buffer[cbuf->head] = etat_ACK;  
-    cbuf->head = next;             
+    cbuf->head = next;
+    if (cbuf->nbData<TAILLE_BUF_CIRC){//pour savoir si on a fait un tour de buffer ou pas
+        cbuf->nbData++;  
+    }
     return 0;  
 }
 
+
+
 // fonction pour calculer le pourcentage actuel 
-//ici
+int verif_taux (buffer_circ buf){
+    int taux=-1;
+    int somme=0;
+    if (buf.nbData==0){
+        return 1;
+    }else{
+        for (int i =0;i<buf.nbData;i++){
+            somme+=buf.buffer[i];
+        }
+        taux=somme/buf.nbData;
+        return (taux<TAUX_LIMITE); 
+    }
+}
 
-// création du buffer circulaire :
+void init_buffer (buffer_circ * buf){
+    memset(buf->buffer, 0, sizeof(buf->buffer));
+    buf->head=0;
+    buf->nbData=0;
+}
 
-buffer_circ buf_c;
-buf_c.head=0;
+
+
 
 /*
  * Permet de créer un socket entre l’application et MIC-TCP
@@ -138,13 +169,16 @@ int mic_tcp_connect(int socket, mic_tcp_sock_addr addr)
  * Retourne la taille des données envoyées, et -1 en cas d'erreur
  */
 
+
+
 int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
 {
     printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
-    
-    unsigned int static nombreDeMessage=0; // prend en compte les pertes aussi
 
-    unsigned int static nombreDeMessageRecu=0; // ne prend pas en compte les pertes
+    if (booleenInitialise==0){
+        init_buffer(&buf_c);
+        booleenInitialise=1;
+    }
 
     // Créer un mic_tcp_pdu
     mic_tcp_pdu pdu;
@@ -163,6 +197,7 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
     struct mic_tcp_ip_addr mictcp_socket_addr = active_ports[mic_sock].remote_addr.ip_addr;
 
     int sent_size = IP_send(pdu, mictcp_socket_addr);
+    printf("passé\n");
     if (sent_size == -1)
     {
         printf("[MIC-TCP] Erreur lors de l'envoi du PDU\n");
@@ -174,42 +209,34 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
     pduACK.payload.size = 8;
     mic_tcp_ip_addr pduLocal;
     mic_tcp_ip_addr pduRemote;
-    while(IP_recv(&pduACK, &pduLocal, &pduRemote, 1000)==-1 || pduACK.header.ack == 0||pduACK.header.ack_num != (num_sequence % 2))
+
+    pduLocal.addr = malloc(100);
+    pduLocal.addr_size = 100;
+    pduRemote.addr = malloc(100);
+    pduRemote.addr_size = 100;
+
+    printf("avant le while\n");
+    while (1)
     {
-            //utiliser le buffer circulaire
-            if (nombreDeMessage<100){
-                taux_limite=nombreDeMessageRecu/nombreDeMessage; //attention div par 0
-            }else { // on a au moins 100 msg
-                taux_limite=
-            }   
-
-
-            //si le numéro de séquence de l'ACK reçu correspond à celui attendu
-            if (pduACK.header.ack_num == (num_sequence % 2)){
-                printf("[MIC-TCP] PDU de type ACK reçu\n");
-                printf("[MIC-TCP] Numéro de séquence : %d\n", pduACK.header.seq_num);
-                printf("[MIC-TCP] Numéro d'acquittement : %d\n", pduACK.header.ack_num);
-                printf("\n"); 
-                num_sequence = (num_sequence + 1) % 2; //modulo 2 à changer
-                nombreDeMessage++;
-                nombreDeMessageRecu++;
-                break; // sinon on fait un sent pour rien
-            }else{ // si le numéro de séquence ne correspond pas à celui attendu
-                printf("PDU de type ACK non reçu, une autre PDU a été reçue\n");
-                printf("Numéro de séquence : %d\n", pduACK.header.seq_num);
-                /*
-                    if (pourcentage_perte>taux_limite){
-                        //rien 
-                    }else {
-                        //le numéro de séquence n'est pas à changer car il n'est pas bon, il sera bon à la prochaine itération
-                        //à changer quand on sera pas modulo 2
-                        nombreDeMessage++;
-                        break;
-                    }
-
-                */
+        int recv_status = IP_recv(&pduACK, &pduLocal, &pduRemote, 1000);
+        if (recv_status != -1 && pduACK.header.ack == 1 && pduACK.header.ack_num == (num_sequence % 2)) {
+            // ACK attendu reçu
+            printf("[MIC-TCP] PDU de type ACK reçu\n");
+            num_sequence = (num_sequence + 1) % 2;
+            buffer_circ_push(&buf_c, 1);
+            break;
+        } else {
+            // Timeout ou mauvais ACK
+            if (verif_taux(buf_c)) {
+                // On accepte la perte, on passe au message suivant
+                buffer_circ_push(&buf_c, 0);
+                break;
             }
-            sent_size = IP_send(pdu, mictcp_socket_addr); // on renvoie la pdu après l'attente d'une seconde
+            // Sinon, on retransmet
+            printf("avant le IP_send\n");
+            sent_size = IP_send(pdu, mictcp_socket_addr);
+            printf("après le send\n");
+        }
     }
         
 
@@ -218,6 +245,8 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
     
 
     free(pduACK.payload.data);
+   // free(pduLocal.addr);
+    free(pduRemote.addr);
     return sent_size;
 }
 
@@ -236,7 +265,7 @@ int mic_tcp_recv (int socket, char* mesg, int max_mesg_size)
         return -1;
     }
     int taille = app_buffer_get(payload);
-    printf("message reçu : %s\n", payload.data);
+    
     if (taille == -1)
     {
         printf("[MIC-TCP] Erreur lors de la récupération du PDU\n");

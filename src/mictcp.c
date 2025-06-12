@@ -145,10 +145,11 @@ int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
 
     // Attente de réception d'un SYN
     while (!synRecu) {
-        statutRecv = IP_recv(&pdu_syn, &local_addr, &remote_addr, 0);
+        statutRecv = IP_recv(&pdu_syn, &local_addr, &remote_addr, 10);
         if (statutRecv != -1 && pdu_syn.header.syn == 1 && pdu_syn.header.ack == 0) {
             synRecu = 1;
             printf("[MIC-TCP] PDU de type SYN reçu\n");
+
             // Copie profonde de l'adresse distante
             if (addr != NULL) {
                 size_t addr_len = strlen(remote_addr.addr) + 1;
@@ -183,6 +184,7 @@ int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
         }
     }
 
+
     // Préparation et envoi du SYN-ACK
     mic_tcp_pdu pdu_synack;
     memset(&pdu_synack, 0, sizeof(mic_tcp_pdu));
@@ -190,8 +192,9 @@ int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
     pdu_synack.header.ack = 1; // SYN-ACK
     pdu_synack.header.source_port = active_ports[socket].local_addr.port;
     pdu_synack.header.dest_port = active_ports[socket].remote_addr.port;
-    IP_send(pdu_synack, active_ports[socket].remote_addr.ip_addr);
+    IP_send(pdu_synack, active_ports[socket].remote_addr.ip_addr)==-1;
     printf("[MIC-TCP] PDU de type SYN-ACK envoyé\n");
+
 
     // Attente de l'ACK final
     mic_tcp_pdu pdu_ack;
@@ -200,11 +203,11 @@ int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
     int ackRecu = 0;
     while (!ackRecu) {
         statutRecv = IP_recv(&pdu_ack, &local_addr, &remote_addr, 100);
-        if (statutRecv != -1 && pdu_ack.header.syn == 0 && pdu_ack.header.ack == 1) {
+        if (statutRecv != -1 && pdu_ack.header.syn == 0 && pdu_ack.header.ack == 1) { //ACK final reçu
             ackRecu = 1;
             printf("[MIC-TCP] PDU de type ACK reçu\n");
-        } else {
-            break; // ACK non reçu, on sort quand même
+        } else{
+            IP_send(pdu_synack, active_ports[socket].remote_addr.ip_addr)==-1; //ACK final non reçu on renvoit SYN-ACK
         }
     }
 
@@ -310,14 +313,11 @@ int mic_tcp_send(int mic_sock, char* mesg, int mesg_size)
     pdu.header.seq_num = num_sequence % 2; // modulo 2 pour alternance
     pdu.header.ack = 0;
     pdu.header.syn = 0;
-    pdu.header.fin = 0;
 
     // Initialisation du buffer circulaire au premier envoi
     if (booleenInitialise == 0) {
         init_buffer(&buf_c);
         booleenInitialise = 1;
-        // Premier message : on force un ACK à traiter côté réception (cas perte ACK de connexion)
-        pdu.header.ack = 1;
     }
 
     struct mic_tcp_ip_addr mictcp_socket_addr = active_ports[mic_sock].remote_addr.ip_addr;

@@ -180,6 +180,17 @@ int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
             memcpy(active_ports[socket].remote_addr.ip_addr.addr, remote_addr.addr, addr_len2);
             active_ports[socket].remote_addr.ip_addr.addr_size = addr_len2;
             active_ports[socket].remote_addr.port = pdu_syn.header.source_port;
+
+            // On récupère le taux limite ici
+            if (pdu_syn.payload.size!=0){
+                int taux_limite_recup;
+                memcpy(&taux_limite_recup,pdu_syn.payload.data,sizeof(int));
+                TAUX_LIMITE=taux_limite_recup;
+                printf("Le taux limite est maintenant setup à %d \n",TAUX_LIMITE);
+            }else{
+                printf("Pas de data dans notre pdu_syn! \n");
+            }
+
         }
     }
 
@@ -227,7 +238,7 @@ int mic_tcp_connect(int socket, mic_tcp_sock_addr addr)
         return -1;
     } else { 
         //on demande le taux accepté au client (voir Readme pour nos explications)
-        printf("Entrez le taux accepté pendant la connexion");
+        printf("Entrez le taux accepté pendant la connexion: ");
         int taux_limite;
         scanf("%d", &taux_limite);
 
@@ -236,10 +247,11 @@ int mic_tcp_connect(int socket, mic_tcp_sock_addr addr)
 
         mic_tcp_pdu pduSYN;
         pduSYN.payload.size = 4; 
-        pdu.payload.data = malloc(sizeof(int));
-        memcpy(pdu.payload.data ,taux_limite,sizeof(int));
+        pduSYN.payload.data = malloc(sizeof(int));
+        memcpy(pduSYN.payload.data ,&taux_limite,sizeof(int));
         pduSYN.header.syn = 1;
-        if (IP_send(pduSYN, active_ports[socket].remote_addr.ip_addr)) { // Envoi du SYN
+
+        if ( IP_send(pduSYN, active_ports[socket].remote_addr.ip_addr) == -1 ) { // Envoi du SYN
             perror("problème IP_send mic_tcp_connect");
         } 
         int recv_status;

@@ -1,6 +1,21 @@
 # BE RESEAU
 ## TPs BE Reseau - 3 MIC
 
+
+# Notes des étudiants:
+
+Pour la phase d'établissement de connexion, nous avons décidé de laisser le choix au client pour le taux de pertes, ce choix était le plus pertinent pour nous.
+
+
+
+
+
+
+
+
+
+
+
 Les détails du sujet du BE est accessible depuis le cours "Programmation Système et Réseau" sur moodle.
 
 

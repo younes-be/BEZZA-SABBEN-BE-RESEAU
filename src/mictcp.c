@@ -1,81 +1,76 @@
 #include <mictcp.h>
 #include <api/mictcp_core.h>
 
-
 #define MAX_PORTS 32
 #define TAILLE_BUF_CIRC 100
 
+// Numéro de séquence courant pour l'envoi
 unsigned static int num_sequence = 0;
-unsigned static int expected_seq_num = 0; // Utilisée pour la gestion du numéro de séquence attendu à la réception
+// Numéro de séquence attendu à la réception
+unsigned static int expected_seq_num = 0; 
+// Tableau des sockets actifs
 static struct mic_tcp_sock active_ports[MAX_PORTS];
 static int nb_active_ports = 0;
-int booleenInitialise=0;
+int booleenInitialise = 0;
 
-int TAUX_LIMITE=-1;
+// Taux de perte limite accepté
+int TAUX_LIMITE = -1;
 
-
-//buffer circulaire pour la fenêtre glissante.
+// Structure pour le buffer circulaire utilisé dans la fenêtre glissante
 typedef struct {
     char buffer[TAILLE_BUF_CIRC];
     int head;
     int nbData;
 } buffer_circ;
 
-
 buffer_circ buf_c;
-//fonction pour gérer le buffer circlaire:
 
+// Fonction pour ajouter un état d'ACK dans le buffer circulaire
 int buffer_circ_push(buffer_circ *cbuf, char etat_ACK)
 {
     if (cbuf == NULL) {
         perror("problème adresse null");
     }
-
-    int next;
-
-    next = cbuf->head + 1;  
+    int next = cbuf->head + 1;  
     if (next >= TAILLE_BUF_CIRC)
         next = 0;
 
     cbuf->buffer[cbuf->head] = etat_ACK;  
     cbuf->head = next;
-    if (cbuf->nbData<TAILLE_BUF_CIRC){//pour savoir si on a fait un tour de buffer ou pas
+    if (cbuf->nbData < TAILLE_BUF_CIRC) { // Vérifie si le buffer a fait un tour complet
         cbuf->nbData++;  
     }
     return 0;  
 }
 
-
-
-// fonction pour calculer le pourcentage actuel 
-int verif_taux (buffer_circ buf){
-    int taux=-1;
-    int somme=0;
-    if (buf.nbData==0){
+// Fonction pour vérifier si le taux de pertes est sous la limite
+int verif_taux(buffer_circ buf)
+{
+    int taux = -1;
+    int somme = 0;
+    if (buf.nbData == 0) {
         return 1;
-    }else{
-        for (int i =0;i<buf.nbData;i++){
-            somme+=buf.buffer[i];
+    } else {
+        for (int i = 0; i < buf.nbData; i++) {
+            somme += buf.buffer[i];
         }
-        taux=somme/buf.nbData;
-        return (taux<TAUX_LIMITE); 
+        taux = somme / buf.nbData;
+        return (taux < TAUX_LIMITE); 
     }
 }
 
-void init_buffer (buffer_circ * buf){
+// Initialise le buffer circulaire
+void init_buffer(buffer_circ *buf)
+{
     memset(buf->buffer, 0, sizeof(buf->buffer));
-    buf->head=0;
-    buf->nbData=0;
+    buf->head = 0;
+    buf->nbData = 0;
 }
 
-
-
-
 /*
- * Permet de créer un socket entre l’application et MIC-TCP
- * Retourne le descripteur du socket ou bien -1 en cas d'erreur
+ * Création d'un socket MIC-TCP
+ * Retourne le descripteur du socket ou -1 en cas d'erreur
  */
-
 int mic_tcp_socket(start_mode sm)
 {
     printf("[MIC-TCP] Appel de la fonction: %s\n", __FUNCTION__);
@@ -86,14 +81,13 @@ int mic_tcp_socket(start_mode sm)
     int result = initialize_components(sm); /* Appel obligatoire */
     set_loss_rate(0);
 
-    //vérification de la sortie de initialize_components
+    // Vérification de la sortie de initialize_components
     if (result == -1) {
         printf("[MIC-TCP] Erreur lors de l'initialisation des composants\n");
         return -1;
     }
 
     // Initialisation de la structure du socket
-    
     memset(&active_ports[nb_active_ports].local_addr, 0, sizeof(mic_tcp_sock_addr));
     memset(&active_ports[nb_active_ports].remote_addr, 0, sizeof(mic_tcp_sock_addr));
     nb_active_ports++;
@@ -101,22 +95,9 @@ int mic_tcp_socket(start_mode sm)
     return nb_active_ports - 1; // retourne l'index du socket créé
 }
 
-// Ajoute un port à la liste des ports actifs
-/*static void add_active_port(int port) {
-    if (nb_active_ports < MAX_PORTS) {
-        struct mic_tcp_sock_addr addrlocal;
-        addrlocal.port = port;
-        addrlocal.ip_addr.addr = "127.0.0.1";
-        addrlocal.ip_addr.addr_size = strlen(addrlocal.ip_addr.addr) + 1;
-        active_ports[nb_active_ports].remote_addr=addrlocal;
-        nb_active_ports++;
-    }else{
-        printf("[MIC-TCP] Erreur : nombre maximum de ports actifs atteint\n");
-    }
-}*/
-
-// Vérifie si un port est actif
-static int is_port_active(int port) {
+// Vérifie si un port est actif dans la liste des sockets
+static int is_port_active(int port)
+{
     for (int i = 0; i < nb_active_ports; ++i) {
         if (active_ports[i].local_addr.port == port) return 1;
     }
@@ -127,23 +108,23 @@ static int is_port_active(int port) {
 }
 
 /*
- * Permet d’attribuer une adresse à un socket.
- * Retourne 0 si succès, et -1 en cas d’échec
+ * Associe une adresse locale à un socket
+ * Retourne 0 si succès, -1 sinon
  */
 int mic_tcp_bind(int socket, mic_tcp_sock_addr addr)
 {
     printf("[MIC-TCP] Appel de la fonction: %s\n", __FUNCTION__);
-    if (socket < 0 || socket >= nb_active_ports){ 
+    if (socket < 0 || socket >= nb_active_ports) { 
         return -1;
-    }else{ 
+    } else { 
         active_ports[socket].local_addr = addr;
         return 0;
     }
 }
 
 /*
- * Met le socket en état d'acceptation de connexions
- * Retourne 0 si succès, -1 si erreur
+ * Met le socket en attente de connexion (mode serveur)
+ * Retourne 0 si succès, -1 sinon
  */
 int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
 {
@@ -153,7 +134,7 @@ int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
     mic_tcp_ip_addr local_addr, remote_addr;
     int synRecu = 0;
 
-    
+    // Allocation mémoire pour les adresses et le PDU
     pdu_syn.payload.data = malloc(8); 
     pdu_syn.payload.size = 8;
     local_addr.addr = malloc(100);
@@ -161,72 +142,104 @@ int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
     remote_addr.addr = malloc(100);
     remote_addr.addr_size = 100;
     int statutRecv;
+
+    // Attente de réception d'un SYN
     while (!synRecu) {
         statutRecv = IP_recv(&pdu_syn, &local_addr, &remote_addr, 0);
-        
         if (statutRecv != -1 && pdu_syn.header.syn == 1 && pdu_syn.header.ack == 0) {
-        synRecu = 1;
-        // on remplit l'adresse distante 
-        if (addr != NULL) {
-            addr->ip_addr.addr = remote_addr.addr;
-            addr->ip_addr.addr_size = strlen(remote_addr.addr) + 1;
-            addr->port = pdu_syn.header.source_port;
-        }else{
-            return -1;// probleme au niveau de l'adresse
-        }
-        // on donne l'adresse distante au socket
-        active_ports[socket].remote_addr = *addr;
+            synRecu = 1;
+            printf("[MIC-TCP] PDU de type SYN reçu\n");
+            // Copie profonde de l'adresse distante
+            if (addr != NULL) {
+                size_t addr_len = strlen(remote_addr.addr) + 1;
+                addr->ip_addr.addr = malloc(addr_len);
+                if (addr->ip_addr.addr == NULL) {
+                    free(pdu_syn.payload.data);
+                    free(local_addr.addr);
+                    free(remote_addr.addr);
+                    return -1;
+                }
+                memcpy(addr->ip_addr.addr, remote_addr.addr, addr_len);
+                addr->ip_addr.addr_size = addr_len;
+                addr->port = pdu_syn.header.source_port;
+            } else {
+                free(pdu_syn.payload.data);
+                free(local_addr.addr);
+                free(remote_addr.addr);
+                return -1;
+            }
+            // Copie profonde pour le socket
+            size_t addr_len2 = strlen(remote_addr.addr) + 1;
+            active_ports[socket].remote_addr.ip_addr.addr = malloc(addr_len2);
+            if (active_ports[socket].remote_addr.ip_addr.addr == NULL) {
+                free(pdu_syn.payload.data);
+                free(local_addr.addr);
+                free(remote_addr.addr);
+                return -1;
+            }
+            memcpy(active_ports[socket].remote_addr.ip_addr.addr, remote_addr.addr, addr_len2);
+            active_ports[socket].remote_addr.ip_addr.addr_size = addr_len2;
+            active_ports[socket].remote_addr.port = pdu_syn.header.source_port;
         }
     }
 
-    // envoi syn-ack
+    // Préparation et envoi du SYN-ACK
     mic_tcp_pdu pdu_synack;
     memset(&pdu_synack, 0, sizeof(mic_tcp_pdu));
     pdu_synack.header.syn = 1;
-    pdu_synack.header.ack = 1;// on remplit les deux flags pour dire que c'est un SYN-ACK
+    pdu_synack.header.ack = 1; // SYN-ACK
     pdu_synack.header.source_port = active_ports[socket].local_addr.port;
     pdu_synack.header.dest_port = active_ports[socket].remote_addr.port;
     IP_send(pdu_synack, active_ports[socket].remote_addr.ip_addr);
+    printf("[MIC-TCP] PDU de type SYN-ACK envoyé\n");
 
-    // attente ack
+    // Attente de l'ACK final
     mic_tcp_pdu pdu_ack;
     pdu_ack.payload.data = malloc(8);
     pdu_ack.payload.size = 8;
     int ackRecu = 0;
-    
     while (!ackRecu) {
         statutRecv = IP_recv(&pdu_ack, &local_addr, &remote_addr, 100);
         if (statutRecv != -1 && pdu_ack.header.syn == 0 && pdu_ack.header.ack == 1) {
             ackRecu = 1;
+            printf("[MIC-TCP] PDU de type ACK reçu\n");
         } else {
-            break;// ack pas recu mais on sort quand meme, on s'en occupe apres.
+            break; // ACK non reçu, on sort quand même
         }
     }
 
+    // Libération mémoire
     free(pdu_syn.payload.data);
     free(pdu_ack.payload.data);
-    free(local_addr.addr);
     free(remote_addr.addr);
 
     return 0;
 }
 
 /*
- * Permet de réclamer l’établissement d’une connexion
- * Retourne 0 si la connexion est établie, et -1 en cas d’échec
+ * Établit une connexion vers un serveur (mode client)
+ * Retourne 0 si succès, -1 sinon
  */
 int mic_tcp_connect(int socket, mic_tcp_sock_addr addr)
 {
     printf("[MIC-TCP] Appel de la fonction: %s\n", __FUNCTION__);
-    if (socket < 0 || socket >= nb_active_ports){ 
+    if (socket < 0 || socket >= nb_active_ports) { 
         return -1;
-    }else{ 
-        active_ports[socket].remote_addr=addr; 
+    } else { 
+        //on demande le taux accepté au client (voir Readme pour nos explications)
+        printf("Entrez le taux accepté pendant la connexion");
+        int taux_limite;
+        scanf("%d", &taux_limite);
+
+
+        active_ports[socket].remote_addr = addr; 
 
         mic_tcp_pdu pduSYN;
-        pduSYN.payload.size=0; //sécurité
-        pduSYN.header.syn=1;
-        if(IP_send(pduSYN,active_ports[socket].remote_addr.ip_addr)){//envoie du SYN
+        pduSYN.payload.size = 4; 
+        pdu.payload.data = malloc(sizeof(int));
+        memcpy(pdu.payload.data ,taux_limite,sizeof(int));
+        pduSYN.header.syn = 1;
+        if (IP_send(pduSYN, active_ports[socket].remote_addr.ip_addr)) { // Envoi du SYN
             perror("problème IP_send mic_tcp_connect");
         } 
         int recv_status;
@@ -238,52 +251,54 @@ int mic_tcp_connect(int socket, mic_tcp_sock_addr addr)
         mic_tcp_ip_addr addrLocal;
         mic_tcp_ip_addr addrRemote;
 
-        addrLocal.addr = malloc(100);
+        addrLocal.addr = malloc(16);//taille de l'adresse IP
         addrLocal.addr_size = 100;
-        addrRemote.addr = malloc(100);
+        addrRemote.addr = malloc(16);//taille de l'adresse IP
         addrRemote.addr_size = 100;
-        while (1)
-        {
-            recv_status=IP_recv(&pduACK, &addrLocal, &addrRemote, 100);
+        while (1) {
+            recv_status = IP_recv(&pduACK, &addrLocal, &addrRemote, 100);
             if (recv_status != -1 && pduACK.header.ack == 1 && pduACK.header.syn == 1) {
                 // SYN-ACK attendu reçu
                 printf("[MIC-TCP] PDU de type SYN-ACK reçu\n");
                 break;
             } else {
-                // Timeout
-                if(IP_send(pduSYN,active_ports[socket].remote_addr.ip_addr)){//renvoie du SYN
+                // Timeout, on renvoie le SYN
+                if (IP_send(pduSYN, active_ports[socket].remote_addr.ip_addr)) {
                     perror("problème IP_send mic_tcp_connect");
                 } 
             }
         }
-        //si on est ici le SYN-ACK a été reçu
+        // SYN-ACK reçu, on envoie l'ACK final
         mic_tcp_pdu pduACKF;
-        pduSYN.payload.size=0; //sécurité
-        pduSYN.header.ack=1;
+        memset(&pduACKF, 0, sizeof(mic_tcp_pdu));
+        pduACKF.header.syn = 0;
+        pduACKF.header.ack = 1;
+        pduACKF.header.source_port = active_ports[socket].local_addr.port;
+        pduACKF.header.dest_port = active_ports[socket].remote_addr.port;
+        pduACKF.payload.size = 0;
+        pduACKF.payload.data = NULL;
         printf("Envoi ACK final de connexion\n");
-        if(IP_send(pduACKF,active_ports[socket].remote_addr.ip_addr)){//envoie du SYN
+        if (IP_send(pduACKF, active_ports[socket].remote_addr.ip_addr)) {
             perror("problème IP_send mic_tcp_connect");
         }
         printf("ACK final de connexion envoyé\n");
         printf("\n ------------------------------------------------------------ \n");
-        printf("Entrez le taux accepté pendant la connexion");
-        scanf("%d", &TAUX_LIMITE);
+
+
+
         return 0;
     }
 }
 
 /*
- * Permet de réclamer l’envoi d’une donnée applicative
- * Retourne la taille des données envoyées, et -1 en cas d'erreur
+ * Envoie une donnée applicative via MIC-TCP
+ * Retourne la taille envoyée, ou -1 en cas d'erreur
  */
-
-
-
-int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
+int mic_tcp_send(int mic_sock, char* mesg, int mesg_size)
 {
-    printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
+    printf("[MIC-TCP] Appel de la fonction: %s\n", __FUNCTION__);
 
-        // Créer un mic_tcp_pdu
+    // Création du PDU
     mic_tcp_pdu pdu;
     pdu.payload.data = mesg;
     pdu.payload.size = mesg_size;
@@ -297,14 +312,13 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
     pdu.header.syn = 0;
     pdu.header.fin = 0;
 
-    if (booleenInitialise==0){
+    // Initialisation du buffer circulaire au premier envoi
+    if (booleenInitialise == 0) {
         init_buffer(&buf_c);
-        booleenInitialise=1;
-        //ici ajouter au 1er message que c'est un ack à traité en réception, dans le cas où on aurait perdu le ack de connexion
-        pdu.header.ack=1;
+        booleenInitialise = 1;
+        // Premier message : on force un ACK à traiter côté réception (cas perte ACK de connexion)
+        pdu.header.ack = 1;
     }
-
-
 
     struct mic_tcp_ip_addr mictcp_socket_addr = active_ports[mic_sock].remote_addr.ip_addr;
 
@@ -315,15 +329,16 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
         return -1;
     }
     
+    // Attente de l'ACK correspondant
     mic_tcp_pdu pduACK;
     pduACK.payload.data = malloc(8); // 8 octets suffisent pour le header
     pduACK.payload.size = 8;
     mic_tcp_ip_addr Local;
     mic_tcp_ip_addr Remote;
 
-    Local.addr = malloc(100); // j'ai du le faire a cause d'un seg fault avec le IP_recv
+    Local.addr = malloc(16);//taille de l'adresse IP
     Local.addr_size = 100;
-    Remote.addr = malloc(100);
+    Remote.addr = malloc(16);//taille de l'adresse IP
     Remote.addr_size = 100;
 
     while (1)
@@ -350,7 +365,6 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
     }
 
     free(pduACK.payload.data);
-   // free(Local.addr);
     free(Remote.addr);
     return sent_size;
 }
@@ -366,7 +380,7 @@ int mic_tcp_recv (int socket, char* mesg, int max_mesg_size)
     printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
     mic_tcp_payload payload;
     payload.data = mesg;
-    if ((payload.size = max_mesg_size) <0){
+    if ((payload.size = max_mesg_size) < 0) {
         return -1;
     }
     int taille = app_buffer_get(payload);
@@ -422,8 +436,7 @@ void process_received_PDU(mic_tcp_pdu pdu, mic_tcp_ip_addr local_addr, mic_tcp_i
             IP_send(ack_pdu, remote_addr);
         }
         // Si c'est un ACK, rien à faire ici (la logique d'attente d'ACK est côté send)
-    }
-    else {
+    } else {
         printf("[MIC-TCP] Erreur : port non actif pour le PDU reçu\n");
     }
 }

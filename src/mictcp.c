@@ -279,9 +279,7 @@ int mic_tcp_send(int mic_sock, char* mesg, int mesg_size)
                 break;
             }
             // Sinon, on retransmet
-            printf("avant le IP_send\n");
             sent_size = IP_send(pdu, mictcp_socket_addr);
-            printf("après le send\n");
         }
     }
 

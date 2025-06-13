@@ -13,8 +13,8 @@ Pour la phase d'établissement de connexion, nous avons décidé de laisser le c
 
 
 
-
-
+Pour la phase d'établissement de connexion, nous avons un accept et un connect. connect envoie un SYN avec mécanisme de reprise de pertes. accept attend un SYN puis s'il le reçoit envoie SYN-ACK avec mécanisme de reprise de perte. 
+A la fin connect envoie un ACK final sans reprise de perte. Si accept reçoit ce ack la connexion est établie. //
 
 Les détails du sujet du BE est accessible depuis le cours "Programmation Système et Réseau" sur moodle.
 

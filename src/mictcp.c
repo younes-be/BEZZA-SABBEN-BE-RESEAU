@@ -234,7 +234,6 @@ int mic_tcp_send(int mic_sock, char* mesg, int mesg_size)
     pdu.header.seq_num = num_sequence % 2; // modulo 2 pour alternance
     pdu.header.ack = 0;
     pdu.header.syn = 0;
-    pdu.header.fin = 0;
 
     // Initialisation du buffer circulaire au premier envoi
     if (booleenInitialise == 0) {

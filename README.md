@@ -35,6 +35,6 @@ Pour la phase d'établissement de connexion, nous avons décidé de laisser le c
 
 Dans la version 4.1 mic_tcp_accept nous attendions que la connexion soit établie en vérifiant avec un while si l'état de la connexion est établie (ESTABLISHED). Dans la version 4.2 nous avons maintenant l'utilisation d'un mutex et d'une variable de condition. Ainsi mic_tcp_accept consomme moins de ressources et se débloque (grâce à pthread_cond_broadcast) quand le ACK final est reçu par process_received_PDU.
 
-###Avantages de MICTCP_v4 vs MICTCP_v2
+### Avantages de MICTCP_v4 vs MICTCP_v2
 
 MICTCP-v4 par rapport à TCP & MICTCP-v2 met en place un mécanisme de fiabilité partielle au lieu d'une fiabilité totale. Cela permet, pour le transfert de vidéo en direct par exemple, de perdre en qualité d'image mais de gagner en fluidité. Cette perte de qualité peut-être gérée avec un taux limite plus ou moins élevé en fonction de la qualité d'image on est prêt à perdre. Nous avons aussi une phase d'établissement de connexion qui permet au serveur et au client de se mettre d'accord sur un numéro de séquence et au client d'envoyer le taux de pertes accepté.

@@ -1,12 +1,20 @@
 # BE RESEAU
-## TPs BE Reseau - 3 MIC
+## TPs BE Reseau - Younès Bezza et Matteo Sabben
 
 
 # Notes des étudiants:
 
 ## Pour la compilation
 
-Aucun changement n'a été fait : make
+Pour compiler mictcp et générer les exécutables des applications de test depuis le code source fourni, taper :
+
+    make
+
+Deux applicatoins de test sont fournies, tsock_texte et tsock_video, elles peuvent être lancées soit en mode puits, soit en mode source selon la syntaxe suivante:
+
+    Usage: ./tsock_texte [-p|-s destination] port
+    Usage: ./tsock_video [[-p|-s] [-t (tcp|mictcp)]
+    
 
 ## Ce qui marche
 
@@ -25,7 +33,7 @@ Pour la phase d'établissement de connexion, nous avons décidé de laisser le c
 
 ### Asynchronicité côté serveur
 
-Dans la version 4.1 mic_tcp_accept nous attendions que la connexion soit établie en vérifiant avec un while si l'état de la connexion est établie (ESTABLISHED). Dans la version 4.2 nous avons maintenant l'utilisation d'un mutex et d'une variable de condition. Ainsi mic_tcp_accept consomme moins de ressources et se débloque quand le ACK final est reçu par process_received_PDU (pthread_cond_broadcast).
+Dans la version 4.1 mic_tcp_accept nous attendions que la connexion soit établie en vérifiant avec un while si l'état de la connexion est établie (ESTABLISHED). Dans la version 4.2 nous avons maintenant l'utilisation d'un mutex et d'une variable de condition. Ainsi mic_tcp_accept consomme moins de ressources et se débloque (pthread_cond_broadcast) quand le ACK final est reçu par process_received_PDU.
 
 ##Avantages de MICTCP_v4 vs MICTCP_v2
 
@@ -53,14 +61,7 @@ Ce dépôt inclut le code source initial fourni pour démarrer le BE. Plus préc
 
 ## Compilation du protocole mictcp et lancement des applications de test fournies
 
-Pour compiler mictcp et générer les exécutables des applications de test depuis le code source fourni, taper :
 
-    make
-
-Deux applicatoins de test sont fournies, tsock_texte et tsock_video, elles peuvent être lancées soit en mode puits, soit en mode source selon la syntaxe suivante:
-
-    Usage: ./tsock_texte [-p|-s destination] port
-    Usage: ./tsock_video [[-p|-s] [-t (tcp|mictcp)]
 
 Seul tsock_video permet d'utiliser, au choix, votre protocole mictcp ou une émulation du comportement de tcp sur un réseau avec pertes.
 

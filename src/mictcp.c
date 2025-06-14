@@ -18,6 +18,8 @@ int booleenInitialise = 0;
 int TAUX_LIMITE = -1;
 buffer_circ buf_c;
 
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER; 
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER; //Pour la synchronisation le thread applicatif et le thread receveur du serveur
 
 // Fonction pour ajouter un état d'ACK dans le buffer circulaire
 int buffer_circ_push(buffer_circ *cbuf, char etat_ACK)
@@ -114,8 +116,18 @@ int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
     
     // La logique de réception du SYN et envoi du SYN-ACK est gérée dans process_received_PDU
     // Donc on attend juste que l'état passe à ESTABLISHED
-    while (active_ports[socket].state != ESTABLISHED) {}// on attend que la connexion soit établie (fait de manière plus optimisée dans la version 4.2)
 
+    if (pthread_mutex_lock(&mutex)){
+        printf("Erreur lors du lock\n");
+        exit(-1);
+    }
+
+    pthread_cond_wait(&cond, &mutex); // la condition sera libérée dès que le connexion est établie permettant à accept de se finir
+
+    if (pthread_mutex_unlock(&mutex)){
+        printf("Erreur lors du unlock\n");
+        exit(-1);
+    }
 
     *addr = active_ports[socket].remote_addr;// Stockage de l'adresse distante au niveau du socket
 
@@ -389,6 +401,7 @@ void process_received_PDU(mic_tcp_pdu pdu, mic_tcp_ip_addr local_addr, mic_tcp_i
                         printf("[MIC-TCP] ACK final reçu\n");
                         ack_received = 1;
                         active_ports[socket_idx].state = ESTABLISHED;
+                        pthread_cond_broadcast(&cond); // pour débloquer le thread applicatif
                     }
                 }
                 free(ack.payload.data);
@@ -408,6 +421,7 @@ void process_received_PDU(mic_tcp_pdu pdu, mic_tcp_ip_addr local_addr, mic_tcp_i
             printf("[MIC-TCP] PDU de type ACK reçu\n");
             printf("[MIC-TCP] Connection établie!\n");
             active_ports[socket_idx].state = ESTABLISHED;
+            pthread_cond_broadcast(&cond); // pour débloquer le thread applicatif
             return;
         }
         // ACK normal pendant la communication

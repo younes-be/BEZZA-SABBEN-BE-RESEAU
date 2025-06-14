@@ -18,6 +18,7 @@ int booleenInitialise = 0;
 int TAUX_LIMITE = -1;
 buffer_circ buf_c;
 
+
 // Fonction pour ajouter un état d'ACK dans le buffer circulaire
 int buffer_circ_push(buffer_circ *cbuf, char etat_ACK)
 {
@@ -113,9 +114,9 @@ int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
     
     // La logique de réception du SYN et envoi du SYN-ACK est gérée dans process_received_PDU
     // Donc on attend juste que l'état passe à ESTABLISHED
-    while (active_ports[socket].state != ESTABLISHED) {
-        //on attend
-    }
+    while (active_ports[socket].state != ESTABLISHED) {}// on attend que la connexion soit établie (fait de manière plus optimisée dans la version 4.2)
+
+
     *addr = active_ports[socket].remote_addr;// Stockage de l'adresse distante au niveau du socket
 
     return 0;
@@ -211,7 +212,7 @@ int mic_tcp_connect(int socket, mic_tcp_sock_addr addr)
     }
 
     free(pdu.payload.data);
-    return syn_ack_received ? 0 : -1;  // a la fin on constate s'il a été recu au bout de nos tentatives
+    return syn_ack_received ? 0 : -1;  // à la fin on constate s'il a été recu au bout de nos tentatives
 }
 
 /*
@@ -239,6 +240,7 @@ int mic_tcp_send(int mic_sock, char* mesg, int mesg_size)
     if (booleenInitialise == 0) {
         init_buffer(&buf_c);
         booleenInitialise = 1;
+        pdu.header.fin=100;//pour détecter le 1er message pour ne pas l'afficher (envoi du taux_limite)
     }
 
     struct mic_tcp_ip_addr mictcp_socket_addr = active_ports[mic_sock].remote_addr.ip_addr;
@@ -422,23 +424,27 @@ void process_received_PDU(mic_tcp_pdu pdu, mic_tcp_ip_addr local_addr, mic_tcp_i
         pdu.payload.size > 0 && 
         !pdu.header.syn && 
         !pdu.header.ack && 
-        !pdu.header.fin &&
-        pdu.payload.data[0] != '\0') {// Vérification en plus pour ne pas afficher une pdu vide.
+        !pdu.header.fin) {// Vérification en plus pour ne pas afficher une pdu vide.
 
-        // Envoi de l'ACK
-        mic_tcp_pdu ack;
-        ack.header.source_port = pdu.header.dest_port;
-        ack.header.dest_port = pdu.header.source_port;
-        ack.header.seq_num = pdu.header.ack_num;
-        ack.header.ack_num = pdu.header.seq_num;
-        ack.header.syn = 0;
-        ack.header.ack = 1;
-        ack.header.fin = 0;
+        if (pdu.header.fin==100){
+            //premier message rien besoin d'afficher
+        }else{
+                // Envoi de l'ACK
+            mic_tcp_pdu ack;
+            ack.header.source_port = pdu.header.dest_port;
+            ack.header.dest_port = pdu.header.source_port;
+            ack.header.seq_num = pdu.header.ack_num;
+            ack.header.ack_num = pdu.header.seq_num;
+            ack.header.syn = 0;
+            ack.header.ack = 1;
+            ack.header.fin = 0;
+            
+            printf("[MIC-TCP] PDU de type ACK envoyé\n");
+            IP_send(ack, remote_addr);
+            
+            // Insertion des données dans le buffer applicatif seulement si c'est un PDU de données valide
+            app_buffer_put(pdu.payload);
+        }
         
-        printf("[MIC-TCP] PDU de type ACK envoyé\n");
-        IP_send(ack, remote_addr);
-        
-        // Insertion des données dans le buffer applicatif seulement si c'est un PDU de données valide
-        app_buffer_put(pdu.payload);
     }
 }
